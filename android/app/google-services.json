@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "592785264800",
+    "project_id": "v-kayplan-travel-app",
+    "storage_bucket": "v-kayplan-travel-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592785264800:android:7967e23ec49105829f39c5",
+        "android_client_info": {
+          "package_name": "com.example.tropicaguide_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAS8TrGuMlVZCWmmATW8vn6KApYYv_tTFs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

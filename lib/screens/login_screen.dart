@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,16 +39,21 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: connect to Firebase Auth
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isRegistering ? 'Account created!' : 'Logged in!'),
-        ),
-      );
-    }
+void _submit() {
+  if (_formKey.currentState!.validate()) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isRegistering ? 'Account created!' : 'Logged in!'),
+      ),
+    );
+
+    // Navigate to dashboard, removing login from the stack
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

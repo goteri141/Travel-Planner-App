@@ -214,7 +214,6 @@ class _StepDetails extends StatelessWidget {
 }
 
 // Step 2: Dates + budget fields and pickers
-
 class _StepDates extends StatelessWidget {
   const _StepDates({
     required this.budgetController,
@@ -287,7 +286,6 @@ class _StepDates extends StatelessWidget {
 }
 
 // Step 3: Optional invite members field
-
 class _StepInvite extends StatefulWidget {
   const _StepInvite({required this.inviteController});
   final TextEditingController inviteController;

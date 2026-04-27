@@ -67,7 +67,6 @@ class _TripDetailScreenState extends State<TripDetailScreen>
 }
 
 // Itinerary tab 
-
 class _ItineraryTab extends StatefulWidget {
   const _ItineraryTab({required this.tripName});
   final String tripName;
@@ -223,7 +222,6 @@ class _ActivityTile extends StatelessWidget {
 }
 
 // Checklist tab
-
 class _ChecklistTab extends StatefulWidget {
   const _ChecklistTab();
 
@@ -314,7 +312,6 @@ class _ChecklistTabState extends State<_ChecklistTab> {
 }
 
 // Packing tab 
-
 class _PackingTab extends StatefulWidget {
   const _PackingTab();
 

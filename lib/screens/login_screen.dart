@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dashboard_screen.dart';
+import '../services/authentication_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,6 +11,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final AuthenticationService _authService = AuthenticationService();
 
   // Mode toggle between register and login
   bool _isRegistering = false;
@@ -39,19 +41,41 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-void _submit() {
-  if (_formKey.currentState!.validate()) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isRegistering ? 'Account created!' : 'Logged in!'),
-      ),
-    );
+Future<void> _submit() async{
+  if (!_formKey.currentState!.validate()) return;
+
+  // check if the user is registering or signing in
+  
+  try {
+    if (_isRegistering) {
+      await _authService.register(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim()
+      );
+      } 
+      else {
+        await _authService.signIn(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim());
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_isRegistering ? 'Account created!' : 'Logged in!'),
+        ),
+      );
 
     // Navigate to dashboard, removing login from the stack
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const DashboardScreen()),
     );
+  } catch (e) {
+     ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+        ),
+      );
   }
 }
 

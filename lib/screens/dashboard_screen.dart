@@ -45,7 +45,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         index: _currentIndex,
         children: [
           _TripsTab(trips: _dummyTrips),
-          const _ExploreTab(),
           const _ProfileTab(),
         ],
       ),
@@ -71,10 +70,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: Icon(Icons.luggage_outlined),
               activeIcon: Icon(Icons.luggage),
               label: 'Trips'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
-              label: 'Explore'),
           BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
               activeIcon: Icon(Icons.person),
@@ -182,15 +177,6 @@ class _TripCard extends StatelessWidget {
     );
   }
 }
-
-class _ExploreTab extends StatelessWidget {
-  const _ExploreTab();
-  @override
-  Widget build(BuildContext context) => const Center(
-      child: Text('Explore coming soon',
-          style: TextStyle(color: Colors.grey)));
-}
-
 class _ProfileTab extends StatelessWidget {
   const _ProfileTab();
   @override

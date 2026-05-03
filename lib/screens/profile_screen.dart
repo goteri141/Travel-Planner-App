@@ -1,16 +1,45 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../screens/splash_screen.dart';
 import '../services/authentication_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
-  // TODO: replace with Firestore user document
-  static const _dummyUser = {
-    'name': 'Alex Rivera',
-    'email': 'alex@email.com',
-    'trips': 5,
-  };
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final AuthenticationService _authService = AuthenticationService();
+  final userID = FirebaseAuth.instance.currentUser!.uid;
+
+  String userName = '';
+  String email = '';
+
+  // Getting User Info 
+  Future<void> loadProfile() async {
+  final user = await FirebaseFirestore.instance
+    .collection('users')
+    .doc(userID)
+    .get();
+  
+  final data = user.data();
+
+  if (data != null) {
+    setState(() {
+      userName = data['name'];
+      email = data['email'];
+    });
+  }
+  }
+  
+  @override
+  void initState() {
+    super.initState();
+    loadProfile();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,13 +61,13 @@ class ProfileScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _dummyUser['name'] as String,
+                    userName,
                     style: const TextStyle(
                         fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _dummyUser['email'] as String,
+                    email,
                     style: const TextStyle(color: Colors.grey, fontSize: 13),
                   ),
                 ],
@@ -100,7 +129,7 @@ class ProfileScreen extends StatelessWidget {
             label: 'Sign Out',
             color: Colors.red.shade400,
             onTap: () async {
-              await AuthenticationService().signOut();
+              await _authService.signOut();
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (context) => const SplashScreen()),

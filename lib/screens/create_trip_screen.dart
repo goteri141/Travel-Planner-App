@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/trip_service.dart';
 import 'dashboard_screen.dart';
 
 class CreateTripScreen extends StatefulWidget {
@@ -19,6 +20,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   final _inviteController = TextEditingController();
   DateTimeRange? _dateRange;
 
+  final _tripService = TripService();
+  final List<String> _memberIds = [];
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -38,16 +42,30 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     }
   }
 
-  void _submit() {
-    // TODO: write to Firestore via firestore_service.dart
+  void _submit() async{
+    // Create Trip and update in trips collection in database
+    try {
+      await _tripService.createTrip(
+        name: _nameController.text.trim(),
+        destination: _destinationController.text.trim(),
+        dateRange: _dateRange!,
+        budgetLimit: double.parse(_budgetController.text.trim()),
+        memberIds: _memberIds);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trip created!')),
+      );
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        (route) => false,
+      );
+  } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Trip created!')),
-    );
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const DashboardScreen()),
-      (route) => false,
-    );
+        const SnackBar(content: Text("There's an error in creating the trip.")),
+      );
+  }
   }
 
   @override
@@ -124,7 +142,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                     onDatePicked: (range) =>
                         setState(() => _dateRange = range),
                   ),
-                  _StepInvite(inviteController: _inviteController),
+                  _StepInvite(
+                    inviteController: _inviteController),
                 ][_step],
               ),
             ),

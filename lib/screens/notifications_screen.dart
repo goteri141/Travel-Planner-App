@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -8,46 +9,37 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  // TODO: replace with FCM / Firestore notification stream
-  final List<_Notif> _notifs = [
-    _Notif(
-      icon: Icons.auto_fix_high,
-      title: 'Optimizer reordered Day 2',
-      body: 'Tanah Lot Temple was moved to 8:00 AM.',
-      time: '2 min ago',
-      isUnread: true,
-      color: Colors.teal,
-    ),
-    _Notif(
-      icon: Icons.edit,
-      title: 'Maria edited the packing list',
-      body: 'Added: Sunscreen SPF50',
-      time: '5 min ago',
-      isUnread: true,
-      color: Colors.orange,
-    ),
-    _Notif(
-      icon: Icons.check_circle_outline,
-      title: 'Kai checked off: Flight booking',
-      body: 'Pre-trip checklist · Bali 2026',
-      time: '1 hr ago',
-      isUnread: false,
-      color: Colors.green,
-    ),
-    _Notif(
-      icon: Icons.luggage,
-      title: 'Your Bali trip starts in 3 days!',
-      body: 'Jun 12 – Jun 20 · 3 members',
-      time: '2 hrs ago',
-      isUnread: false,
-      color: Colors.teal,
-    ),
-  ];
+  // Displays list of notifications in the User's Profile
+  final List<_Notif> _notifs = [];
+
+  Future<void> buildFCM() async {
+    await FirebaseMessaging.instance.requestPermission();
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      setState(() {
+        _notifs.insert(0,
+        _Notif(
+          icon: Icons.notifications,
+          title: message.notification?.title ?? 'Tropica Gude',
+          body: message.notification?.body ?? '',
+          time: 'Just now',
+          color: Colors.teal,
+          isUnread: true
+        ));
+      });
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    buildFCM();
+  }
 
   void _markAllRead() {
     setState(() {
-      for (final n in _notifs) {
-        n.isUnread = false;
+      for (final notif in _notifs) {
+        notif.isUnread = false;
       }
     });
   }

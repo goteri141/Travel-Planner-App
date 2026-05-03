@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../services/trip_service.dart';
 
 class TripSettingsScreen extends StatefulWidget {
-  const TripSettingsScreen({super.key, required this.trip});
+  const TripSettingsScreen({super.key, required this.trip, required this.tripID});
 
-  final Map<String, String> trip;
+  final Map<String, dynamic> trip;
+  final String tripID;
 
   @override
   State<TripSettingsScreen> createState() => _TripSettingsScreenState();
@@ -17,7 +19,8 @@ class _TripSettingsScreenState extends State<TripSettingsScreen> {
   final TextEditingController _inviteController = TextEditingController();
 
   // TODO: replace with real member list from Firestore
-  final List<String> _members = ['Alex (you)', 'Maria', 'Kai'];
+  final _tripService = TripService();
+  late List<String> _members;
 
   @override
   void initState() {
@@ -27,7 +30,8 @@ class _TripSettingsScreenState extends State<TripSettingsScreen> {
     _destinationController =
         TextEditingController(text: widget.trip['destination'] ?? '');
     _budgetController =
-        TextEditingController(text: widget.trip['budget'] ?? '');
+        TextEditingController(text: widget.trip['budget']?.toString() ?? '');
+    _members = List<String>.from(widget.trip['memberIds'] ?? []);
   }
 
   @override
@@ -39,14 +43,27 @@ class _TripSettingsScreenState extends State<TripSettingsScreen> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async{
     if (!_formKey.currentState!.validate()) return;
     // TODO: update Firestore trip document
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Trip updated')),
-    );
-    Navigator.pop(context);
-  }
+    try {
+      await _tripService.updateTrip(
+        tripID: widget.tripID,
+        name: _nameController.text.trim(),
+        destination: _destinationController.text.trim(),
+        budgetLimit: double.parse(_budgetController.text.trim()),
+        memberIds: _members
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trip updated')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("There's an error updating the trip")),
+      );
+    } }
 
   void _addMember() {
     final email = _inviteController.text.trim();
@@ -56,6 +73,7 @@ class _TripSettingsScreenState extends State<TripSettingsScreen> {
       _inviteController.clear();
     });
     // TODO: look up user by email in Firestore and add to trip memberIds
+    
   }
 
   void _removeMember(String member) {
@@ -82,11 +100,19 @@ class _TripSettingsScreenState extends State<TripSettingsScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade400),
-            onPressed: () {
+            onPressed: () async{
               // TODO: delete Firestore trip document
-              Navigator.pop(context); // close dialog
-              Navigator.pop(context); // close settings
-              Navigator.pop(context); // close trip detail
+              try {
+                await _tripService.deleteTrip(widget.tripID);
+                Navigator.pop(context); // close dialog
+                Navigator.pop(context); // close settings
+                Navigator.pop(context);
+              } catch (e)  {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("There's an error when deleting the trip"))
+                );
+              }// close trip detail
             },
             child: const Text('Delete'),
           ),

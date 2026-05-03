@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'add_activity_sheet.dart';
+import 'add_item_dialogs.dart';
+import 'optimizer_screen.dart';
 
 class TripDetailScreen extends StatefulWidget {
   const TripDetailScreen({super.key, required this.trip});
@@ -34,14 +37,13 @@ class _TripDetailScreenState extends State<TripDetailScreen>
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () {
-              // TODO: navigate to trip settings
+              // TODO: navigate to trip settings screen
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Trip settings coming soon')),
               );
             },
           ),
         ],
-        // Navigation bar
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.teal,
@@ -57,19 +59,23 @@ class _TripDetailScreenState extends State<TripDetailScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _ItineraryTab(tripName: widget.trip['name']!),
+          _ItineraryTab(trip: widget.trip),
           const _ChecklistTab(),
-          const _PackingTab(),
+          _PackingTab(
+            // TODO: replace with real member list from Firestore
+            members: const ['Alex', 'Maria', 'Kai'],
+          ),
         ],
       ),
     );
   }
 }
 
-// Itinerary tab 
+// ── Itinerary tab ─────────────────────────────────────────────────────────────
+
 class _ItineraryTab extends StatefulWidget {
-  const _ItineraryTab({required this.tripName});
-  final String tripName;
+  const _ItineraryTab({required this.trip});
+  final Map<String, String> trip;
 
   @override
   State<_ItineraryTab> createState() => _ItineraryTabState();
@@ -78,9 +84,8 @@ class _ItineraryTab extends StatefulWidget {
 class _ItineraryTabState extends State<_ItineraryTab> {
   int _selectedDay = 0;
 
-  // SAMPLE DATA
-  // TODO: replace with Firestore data
-  final List<Map<String, String>> _dummyActivities = [
+  // TODO: replace with Firestore stream per day
+  final List<Map<String, String>> _activities = [
     {
       'time': '9:00 AM',
       'name': 'Tanah Lot Temple',
@@ -88,6 +93,30 @@ class _ItineraryTabState extends State<_ItineraryTab> {
       'duration': '2h',
     },
   ];
+
+  Future<void> _openAddActivity() async {
+    final result = await showAddActivitySheet(context);
+    if (result != null) {
+      setState(() {
+        _activities.add({
+          'time': result.time,
+          'name': result.name,
+          'cost': '\$${result.cost.toStringAsFixed(0)}',
+          'duration': result.duration,
+        });
+      });
+      // TODO: write new activity to Firestore
+    }
+  }
+
+  void _openOptimizer() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OptimizerScreen(activities: _activities),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +127,8 @@ class _ItineraryTabState extends State<_ItineraryTab> {
           height: 52,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             itemCount: 5,
             itemBuilder: (context, index) {
               final isSelected = _selectedDay == index;
@@ -106,8 +136,8 @@ class _ItineraryTabState extends State<_ItineraryTab> {
                 onTap: () => setState(() => _selectedDay = index),
                 child: Container(
                   margin: const EdgeInsets.only(right: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected ? Colors.teal : Colors.teal.shade50,
                     borderRadius: BorderRadius.circular(20),
@@ -128,12 +158,11 @@ class _ItineraryTabState extends State<_ItineraryTab> {
 
         const Divider(height: 1),
 
-        // Activity list
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              ..._dummyActivities.map((a) => _ActivityTile(activity: a)),
+              ..._activities.map((a) => _ActivityTile(activity: a)),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 icon: const Icon(Icons.add),
@@ -145,23 +174,13 @@ class _ItineraryTabState extends State<_ItineraryTab> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onPressed: () {
-                  // TODO: open add activity sheet
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Add activity coming soon')),
-                  );
-                },
+                onPressed: _openAddActivity,
               ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 icon: const Icon(Icons.auto_fix_high),
                 label: const Text('Run Optimizer'),
-                onPressed: () {
-                  // TODO: run optimizer_service and show results
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Optimizer coming soon')),
-                  );
-                },
+                onPressed: _activities.isEmpty ? null : _openOptimizer,
               ),
             ],
           ),
@@ -185,7 +204,6 @@ class _ActivityTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            // Time column
             SizedBox(
               width: 56,
               child: Text(
@@ -195,7 +213,6 @@ class _ActivityTile extends StatelessWidget {
             ),
             Container(width: 1, height: 40, color: Colors.teal.shade100),
             const SizedBox(width: 12),
-            // Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,7 +225,8 @@ class _ActivityTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${activity['cost']}  ·  ${activity['duration']}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
               ),
@@ -221,7 +239,8 @@ class _ActivityTile extends StatelessWidget {
   }
 }
 
-// Checklist tab
+// ── Checklist tab ─────────────────────────────────────────────────────────────
+
 class _ChecklistTab extends StatefulWidget {
   const _ChecklistTab();
 
@@ -235,6 +254,14 @@ class _ChecklistTabState extends State<_ChecklistTab> {
     {'label': 'Book flights', 'done': true, 'by': 'Alex'},
   ];
 
+  Future<void> _addItem() async {
+    final label = await showAddChecklistItemDialog(context);
+    if (label != null) {
+      setState(() => _items.add({'label': label, 'done': false, 'by': null}));
+      // TODO: write new checklist item to Firestore
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final done = _items.where((i) => i['done'] == true).length;
@@ -242,17 +269,17 @@ class _ChecklistTabState extends State<_ChecklistTab> {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Progress bar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('$done / ${_items.length} complete',
                   style: const TextStyle(color: Colors.grey, fontSize: 13)),
-              Text('${(done / (_items.isEmpty ? 1 : _items.length) * 100).round()}%',
-                  style: const TextStyle(
-                      color: Colors.teal, fontWeight: FontWeight.bold)),
+              Text(
+                '${(done / (_items.isEmpty ? 1 : _items.length) * 100).round()}%',
+                style: const TextStyle(
+                    color: Colors.teal, fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -263,8 +290,6 @@ class _ChecklistTabState extends State<_ChecklistTab> {
             borderRadius: BorderRadius.circular(4),
           ),
           const SizedBox(height: 16),
-
-          // Items for checklist
           Expanded(
             child: ListView(
               children: [
@@ -278,13 +303,17 @@ class _ChecklistTabState extends State<_ChecklistTab> {
                             decoration: e.value['done']
                                 ? TextDecoration.lineThrough
                                 : null,
-                            color: e.value['done'] ? Colors.grey : Colors.black,
+                            color: e.value['done']
+                                ? Colors.grey
+                                : Colors.black,
                           ),
                         ),
-                        subtitle: e.value['done']
-                            ? Text('by ${e.value['by']}',
-                                style: const TextStyle(fontSize: 11))
-                            : null,
+                        subtitle:
+                            e.value['done'] && e.value['by'] != null
+                                ? Text('by ${e.value['by']}',
+                                    style:
+                                        const TextStyle(fontSize: 11))
+                                : null,
                         onChanged: (val) {
                           // TODO: Firestore transaction update
                           setState(() => _items[e.key]['done'] = val);
@@ -295,12 +324,7 @@ class _ChecklistTabState extends State<_ChecklistTab> {
                   leading: const Icon(Icons.add, color: Colors.teal),
                   title: const Text('Add item',
                       style: TextStyle(color: Colors.teal)),
-                  onTap: () {
-                    // TODO: show add item dialog
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Add item coming soon')),
-                    );
-                  },
+                  onTap: _addItem,
                 ),
               ],
             ),
@@ -311,9 +335,11 @@ class _ChecklistTabState extends State<_ChecklistTab> {
   }
 }
 
-// Packing tab 
+// ── Packing tab ───────────────────────────────────────────────────────────────
+
 class _PackingTab extends StatefulWidget {
-  const _PackingTab();
+  const _PackingTab({required this.members});
+  final List<String> members;
 
   @override
   State<_PackingTab> createState() => _PackingTabState();
@@ -325,6 +351,21 @@ class _PackingTabState extends State<_PackingTab> {
     {'label': 'Sunscreen SPF50', 'assignedTo': 'Alex', 'claimed': true},
     {'label': 'Snorkeling Gear', 'assignedTo': null, 'claimed': false},
   ];
+
+  Future<void> _addItem() async {
+    final result = await showAddPackingItemDialog(
+      context,
+      members: widget.members,
+    );
+    if (result != null) {
+      setState(() => _items.add({
+            'label': result.label,
+            'assignedTo': result.assignedTo,
+            'claimed': result.assignedTo != null,
+          }));
+      // TODO: write new packing item to Firestore
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -384,11 +425,7 @@ class _PackingTabState extends State<_PackingTab> {
                   leading: const Icon(Icons.add, color: Colors.teal),
                   title: const Text('Add item',
                       style: TextStyle(color: Colors.teal)),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Add item coming soon')),
-                    );
-                  },
+                  onTap: _addItem,
                 ),
               ],
             ),

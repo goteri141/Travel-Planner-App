@@ -3,10 +3,15 @@ import 'add_activity_sheet.dart';
 import 'add_item_dialogs.dart';
 import 'optimizer_screen.dart';
 import 'trip_settings_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TripDetailScreen extends StatefulWidget {
-  const TripDetailScreen({super.key, required this.trip});
-  final Map<String, String> trip;
+  const TripDetailScreen({super.key, required this.trip, required this.tripID});
+
+  // Changed from Map<String, String> to Map<String, dynamic>
+  // to match Firestore document data
+  final Map<String, dynamic> trip;
+  final String tripID;
 
   @override
   State<TripDetailScreen> createState() => _TripDetailScreenState();
@@ -30,16 +35,22 @@ class _TripDetailScreenState extends State<TripDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tripName = widget.trip['name'] as String? ?? 'Trip';
+    final members = List<String>.from(widget.trip['memberIds'] ?? []);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.trip['name']!),
+        title: Text(tripName),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => TripSettingsScreen(trip: widget.trip),
+                builder: (_) => TripSettingsScreen(
+                  trip: widget.trip,
+                  tripID: widget.tripID,
+                ),
               ),
             ),
           ),
@@ -59,12 +70,9 @@ class _TripDetailScreenState extends State<TripDetailScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _ItineraryTab(trip: widget.trip),
+          _ItineraryTab(tripID: widget.tripID),
           const _ChecklistTab(),
-          _PackingTab(
-            // TODO: replace with real member list from Firestore
-            members: const ['Alex', 'Maria', 'Kai'],
-          ),
+          _PackingTab(members: members),
         ],
       ),
     );
@@ -74,80 +82,115 @@ class _TripDetailScreenState extends State<TripDetailScreen>
 // ── Itinerary tab ─────────────────────────────────────────────────────────────
 
 class _ItineraryTab extends StatefulWidget {
-  const _ItineraryTab({required this.trip});
-  final Map<String, String> trip;
+  const _ItineraryTab({required this.tripID});
+  final String tripID;
 
   @override
   State<_ItineraryTab> createState() => _ItineraryTabState();
 }
 
 class _ItineraryTabState extends State<_ItineraryTab> {
-
-  // TODO: replace with Firestore stream
-  final List<Map<String, String>> _activities = [
-    {
-      'time': '9:00 AM',
-      'name': 'Tanah Lot Temple',
-      'cost': '\$10',
-      'duration': '2h',
-    },
-  ];
-
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
   Future<void> _openAddActivity() async {
     final result = await showAddActivitySheet(context);
+
     if (result != null) {
-      setState(() {
-        _activities.add({
-          'time': result.time,
-          'name': result.name,
-          'cost': '\$${result.cost.toStringAsFixed(0)}',
-          'duration': result.duration,
-        });
+      await _firestore
+          .collection('trips')
+          .doc(widget.tripID)
+          .collection('itinerary')
+          .add({
+        'name': result.name,
+        'time': result.time,
+        'cost': result.cost,
+        'duration': result.duration,
+        'createdAt': FieldValue.serverTimestamp(),
       });
-      // TODO: write new activity to Firestore
     }
   }
 
-  void _openOptimizer() {
+  void _openOptimizer(List<Map<String, String>> activities) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OptimizerScreen(activities: _activities),
+        builder: (_) => OptimizerScreen(activities: activities),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              ..._activities.map((a) => _ActivityTile(activity: a)),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Add Activity'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.teal,
-                  side: const BorderSide(color: Colors.teal),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: _openAddActivity,
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('trips')
+          .doc(widget.tripID)
+          .collection('itinerary')
+          .orderBy('createdAt')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        return Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  ...docs.map((doc) {
+                    final activity =
+                        doc.data() as Map<String, dynamic>;
+
+                    return _ActivityTile(
+                      activity: {
+                        'time': activity['time'] ?? '',
+                        'name': activity['name'] ?? '',
+                        'cost': '\$${activity['cost']}',
+                        'duration': activity['duration'] ?? '',
+                      },
+                    );
+                  }),
+
+                  const SizedBox(height: 8),
+
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Activity'),
+                    onPressed: _openAddActivity,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: const Text('Run Optimizer'),
+                    onPressed: docs.isEmpty
+                        ? null
+                        : () {
+                            final activities = docs.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+
+                              return {
+                                'time': data['time']?.toString() ?? '',
+                                'name': data['name']?.toString() ?? '',
+                                'cost': '\$${data['cost'] ?? 0}',
+                                'duration': data['duration']?.toString() ?? '',
+                              };
+                            }).toList();
+
+                            _openOptimizer(activities);
+                          },
+                  )
+                ],
               ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.auto_fix_high),
-                label: const Text('Run Optimizer'),
-                onPressed: _activities.isEmpty ? null : _openOptimizer,
-              ),
-            ],
-          ),
-        ),
-      ],
+            )
+          ],
+        );
+      },
     );
   }
 }
@@ -163,18 +206,15 @@ class _ActivityTile extends StatelessWidget {
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
             SizedBox(
               width: 56,
               child: Text(activity['time']!,
-                  style:
-                      const TextStyle(fontSize: 12, color: Colors.grey)),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ),
-            Container(
-                width: 1, height: 40, color: Colors.teal.shade100),
+            Container(width: 1, height: 40, color: Colors.teal.shade100),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -185,8 +225,8 @@ class _ActivityTile extends StatelessWidget {
                           fontWeight: FontWeight.w600, fontSize: 14)),
                   const SizedBox(height: 2),
                   Text('${activity['cost']}  ·  ${activity['duration']}',
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.grey)),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
             ),
@@ -216,8 +256,7 @@ class _ChecklistTabState extends State<_ChecklistTab> {
   Future<void> _addItem() async {
     final label = await showAddChecklistItemDialog(context);
     if (label != null) {
-      setState(
-          () => _items.add({'label': label, 'done': false, 'by': null}));
+      setState(() => _items.add({'label': label, 'done': false, 'by': null}));
       // TODO: write to Firestore
     }
   }
@@ -233,8 +272,7 @@ class _ChecklistTabState extends State<_ChecklistTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('$done / ${_items.length} complete',
-                  style:
-                      const TextStyle(color: Colors.grey, fontSize: 13)),
+                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
               Text(
                 '${(done / (_items.isEmpty ? 1 : _items.length) * 100).round()}%',
                 style: const TextStyle(
@@ -263,27 +301,23 @@ class _ChecklistTabState extends State<_ChecklistTab> {
                             decoration: e.value['done']
                                 ? TextDecoration.lineThrough
                                 : null,
-                            color: e.value['done']
-                                ? Colors.grey
-                                : Colors.black,
+                            color:
+                                e.value['done'] ? Colors.grey : Colors.black,
                           ),
                         ),
                         subtitle:
                             e.value['done'] && e.value['by'] != null
                                 ? Text('by ${e.value['by']}',
-                                    style:
-                                        const TextStyle(fontSize: 11))
+                                    style: const TextStyle(fontSize: 11))
                                 : null,
                         onChanged: (val) {
                           // TODO: Firestore transaction
-                          setState(
-                              () => _items[e.key]['done'] = val);
+                          setState(() => _items[e.key]['done'] = val);
                         },
                       ),
                     ),
                 ListTile(
-                  leading:
-                      const Icon(Icons.add, color: Colors.teal),
+                  leading: const Icon(Icons.add, color: Colors.teal),
                   title: const Text('Add item',
                       style: TextStyle(color: Colors.teal)),
                   onTap: _addItem,
@@ -371,8 +405,7 @@ class _PackingTabState extends State<_PackingTab> {
                                     // TODO: Firestore transaction
                                     setState(() {
                                       _items[e.key]['claimed'] = true;
-                                      _items[e.key]['assignedTo'] =
-                                          'You';
+                                      _items[e.key]['assignedTo'] = 'You';
                                     });
                                   },
                                   child: const Text('Claim'),
@@ -381,8 +414,7 @@ class _PackingTabState extends State<_PackingTab> {
                       ),
                     ),
                 ListTile(
-                  leading:
-                      const Icon(Icons.add, color: Colors.teal),
+                  leading: const Icon(Icons.add, color: Colors.teal),
                   title: const Text('Add item',
                       style: TextStyle(color: Colors.teal)),
                   onTap: _addItem,

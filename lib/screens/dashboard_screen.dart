@@ -3,6 +3,7 @@ import 'trip_detail_screen.dart';
 import 'create_trip_screen.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
+import '../services/trip_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,17 +14,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
-
-  // TODO: replace with Firestore stream
-  final List<Map<String, String>> _dummyTrips = [
-    {
-      'id': '1',
-      'name': 'Bali 2026',
-      'destination': 'Bali, Indonesia',
-      'dates': 'Jun 12 – Jun 20',
-      'members': '3',
-    },
-  ];
+  final TripService _tripService = TripService();
 
   @override
   Widget build(BuildContext context) {
@@ -35,8 +26,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (_) => const NotificationsScreen()),
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
             ),
           ),
         ],
@@ -44,7 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _TripsTab(trips: _dummyTrips),
+          _TripsTab(tripService: _tripService),
           const _ProfileTab(),
         ],
       ),
@@ -81,40 +71,104 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _TripsTab extends StatelessWidget {
-  const _TripsTab({required this.trips});
-  final List<Map<String, String>> trips;
+  const _TripsTab({required this.tripService});
+  final TripService tripService;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Your Trips',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.teal.shade700)),
-          const SizedBox(height: 16),
-          if (trips.isEmpty)
-            const Center(
-                child: Text('No trips yet — tap + to create one',
-                    style: TextStyle(color: Colors.grey)))
-          else
-            ...trips.map((trip) => _TripCard(trip: trip)),
-        ],
-      ),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: tripService.getTrips(),
+      builder: (context, snapshot) {
+        // Loading
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.teal),
+          );
+        }
+
+        // Error
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off, color: Colors.grey, size: 48),
+                const SizedBox(height: 12),
+                const Text('Could not load trips',
+                    style: TextStyle(color: Colors.grey, fontSize: 15)),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Retry',
+                      style: TextStyle(color: Colors.teal)),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final trips = snapshot.data ?? [];
+
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your Trips',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700)),
+              const SizedBox(height: 16),
+              if (trips.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.luggage_outlined,
+                            color: Colors.grey, size: 48),
+                        SizedBox(height: 12),
+                        Text('No trips yet — tap + to create one',
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: trips.length,
+                    itemBuilder: (context, i) =>
+                        _TripCard(trip: trips[i]),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
 class _TripCard extends StatelessWidget {
   const _TripCard({required this.trip});
-  final Map<String, String> trip;
+  final Map<String, dynamic> trip;
 
   @override
   Widget build(BuildContext context) {
+    final name = trip['name'] as String? ?? 'Unnamed Trip';
+    final destination = trip['destination'] as String? ?? '';
+    final id = trip['id'] as String? ?? '';
+    final memberCount = (trip['memberIds'] as List?)?.length ?? 0;
+
+    // Firestore stores dates as Timestamps — convert to display string
+    final startTs = trip['startDate'];
+    final endTs = trip['endDate'];
+    final dates = (startTs != null && endTs != null)
+        ? '${_fmtTimestamp(startTs)} – ${_fmtTimestamp(endTs)}'
+        : '';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
@@ -124,7 +178,9 @@ class _TripCard extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (context) => TripDetailScreen(trip: trip)),
+            builder: (context) =>
+                TripDetailScreen(trip: trip, tripID: id),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -143,26 +199,28 @@ class _TripCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(trip['name']!,
+                    Text(name,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 2),
-                    Text(trip['destination']!,
+                    Text(destination,
                         style: const TextStyle(
                             color: Colors.grey, fontSize: 13)),
                     const SizedBox(height: 4),
                     Row(children: [
-                      const Icon(Icons.calendar_today_outlined,
-                          size: 12, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(trip['dates']!,
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.grey)),
-                      const SizedBox(width: 12),
+                      if (dates.isNotEmpty) ...[
+                        const Icon(Icons.calendar_today_outlined,
+                            size: 12, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text(dates,
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey)),
+                        const SizedBox(width: 12),
+                      ],
                       const Icon(Icons.group_outlined,
                           size: 12, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text('${trip['members']} members',
+                      Text('$memberCount members',
                           style: const TextStyle(
                               fontSize: 12, color: Colors.grey)),
                     ]),
@@ -176,7 +234,21 @@ class _TripCard extends StatelessWidget {
       ),
     );
   }
+
+  String _fmtTimestamp(dynamic ts) {
+    try {
+      final date = (ts as dynamic).toDate() as DateTime;
+      const months = [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[date.month]} ${date.day}';
+    } catch (_) {
+      return '';
+    }
+  }
 }
+
 class _ProfileTab extends StatelessWidget {
   const _ProfileTab();
   @override

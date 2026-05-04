@@ -4,7 +4,16 @@ A new Flutter project.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+Tropica Guide is a simple, user-friendly travel planner app that helps users to manage travel plans with itinerary optimization and tracks real-time collaborative editing synchronization.
+
+Instructions
+- Create a new trip -> '+ New Trip'
+- Delete a trip -> Select trip you want to delete -> Go to Settings -> Select Delete Trip
+- Add an activity to itinerary -> Select a trip -> Under Itinerary select '+ Add Activity'
+
+Enhanced App Features
+- Itinerary optimization: organizes activities by time, travel distance, and budget limits for easy browsing
+- Real-Time Collaborative Editing: Users are allowed to invite other users on trips by adding and removing members from trip
 
 A few resources to get you started if this is your first Flutter project:
 

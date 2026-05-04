@@ -71,8 +71,8 @@ class _TripDetailScreenState extends State<TripDetailScreen>
         controller: _tabController,
         children: [
           _ItineraryTab(tripID: widget.tripID),
-          const _ChecklistTab(),
-          _PackingTab(members: members),
+          _ChecklistTab(tripID: widget.tripID),
+          _PackingTab(tripID: widget.tripID, members: members),
         ],
       ),
     );
@@ -241,92 +241,128 @@ class _ActivityTile extends StatelessWidget {
 // ── Checklist tab ─────────────────────────────────────────────────────────────
 
 class _ChecklistTab extends StatefulWidget {
-  const _ChecklistTab();
+  const _ChecklistTab({required this.tripID});
+
+  final String tripID;
 
   @override
   State<_ChecklistTab> createState() => _ChecklistTabState();
 }
 
 class _ChecklistTabState extends State<_ChecklistTab> {
-  // TODO: replace with Firestore stream + transactions
-  final List<Map<String, dynamic>> _items = [
-    {'label': 'Book flights', 'done': true, 'by': 'Alex'},
-  ];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  CollectionReference<Map<String, dynamic>> get _checklistRef =>
+      _firestore.collection('trips').doc(widget.tripID).collection('checklist');
 
   Future<void> _addItem() async {
     final label = await showAddChecklistItemDialog(context);
-    if (label != null) {
-      setState(() => _items.add({'label': label, 'done': false, 'by': null}));
-      // TODO: write to Firestore
+
+    if (label != null && label.trim().isNotEmpty) {
+      await _checklistRef.add({
+        'label': label.trim(),
+        'done': false,
+        'by': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     }
+  }
+
+  Future<void> _toggleItem(String itemId, bool done) async {
+    await _checklistRef.doc(itemId).update({
+      'done': done,
+      'by': done ? 'You' : null,
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final done = _items.where((i) => i['done'] == true).length;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _checklistRef.orderBy('createdAt').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.teal),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        final done = docs.where((doc) => doc.data()['done'] == true).length;
+        final percent = docs.isEmpty ? 0 : (done / docs.length * 100).round();
+
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
             children: [
-              Text('$done / ${_items.length} complete',
-                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
-              Text(
-                '${(done / (_items.isEmpty ? 1 : _items.length) * 100).round()}%',
-                style: const TextStyle(
-                    color: Colors.teal, fontWeight: FontWeight.bold),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$done / ${docs.length} complete',
+                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                  Text(
+                    '$percent%',
+                    style: const TextStyle(
+                      color: Colors.teal,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: docs.isEmpty ? 0 : done / docs.length,
+                color: Colors.teal,
+                backgroundColor: Colors.teal.shade50,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView(
+                  children: [
+                    ...docs.map((doc) {
+                      final item = doc.data();
+                      final isDone = item['done'] == true;
+                      final by = item['by'];
+
+                      return CheckboxListTile(
+                        value: isDone,
+                        activeColor: Colors.teal,
+                        title: Text(
+                          item['label'] ?? '',
+                          style: TextStyle(
+                            decoration:
+                                isDone ? TextDecoration.lineThrough : null,
+                            color: isDone ? Colors.grey : Colors.black,
+                          ),
+                        ),
+                        subtitle: isDone && by != null
+                            ? Text(
+                                'by $by',
+                                style: const TextStyle(fontSize: 11),
+                              )
+                            : null,
+                        onChanged: (val) {
+                          _toggleItem(doc.id, val ?? false);
+                        },
+                      );
+                    }),
+                    ListTile(
+                      leading: const Icon(Icons.add, color: Colors.teal),
+                      title: const Text(
+                        'Add item',
+                        style: TextStyle(color: Colors.teal),
+                      ),
+                      onTap: _addItem,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          LinearProgressIndicator(
-            value: _items.isEmpty ? 0 : done / _items.length,
-            color: Colors.teal,
-            backgroundColor: Colors.teal.shade50,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView(
-              children: [
-                ..._items.asMap().entries.map(
-                      (e) => CheckboxListTile(
-                        value: e.value['done'],
-                        activeColor: Colors.teal,
-                        title: Text(
-                          e.value['label'],
-                          style: TextStyle(
-                            decoration: e.value['done']
-                                ? TextDecoration.lineThrough
-                                : null,
-                            color:
-                                e.value['done'] ? Colors.grey : Colors.black,
-                          ),
-                        ),
-                        subtitle:
-                            e.value['done'] && e.value['by'] != null
-                                ? Text('by ${e.value['by']}',
-                                    style: const TextStyle(fontSize: 11))
-                                : null,
-                        onChanged: (val) {
-                          // TODO: Firestore transaction
-                          setState(() => _items[e.key]['done'] = val);
-                        },
-                      ),
-                    ),
-                ListTile(
-                  leading: const Icon(Icons.add, color: Colors.teal),
-                  title: const Text('Add item',
-                      style: TextStyle(color: Colors.teal)),
-                  onTap: _addItem,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -334,7 +370,12 @@ class _ChecklistTabState extends State<_ChecklistTab> {
 // ── Packing tab ───────────────────────────────────────────────────────────────
 
 class _PackingTab extends StatefulWidget {
-  const _PackingTab({required this.members});
+  const _PackingTab({
+    required this.tripID,
+    required this.members,
+  });
+
+  final String tripID;
   final List<String> members;
 
   @override
@@ -342,88 +383,113 @@ class _PackingTab extends StatefulWidget {
 }
 
 class _PackingTabState extends State<_PackingTab> {
-  // TODO: replace with Firestore stream + transactions
-  final List<Map<String, dynamic>> _items = [
-    {'label': 'Sunscreen SPF50', 'assignedTo': 'Alex', 'claimed': true},
-    {'label': 'Snorkeling Gear', 'assignedTo': null, 'claimed': false},
-  ];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  CollectionReference<Map<String, dynamic>> get _packingRef =>
+      _firestore.collection('trips').doc(widget.tripID).collection('packing');
 
   Future<void> _addItem() async {
     final result = await showAddPackingItemDialog(
       context,
       members: widget.members,
     );
-    if (result != null) {
-      setState(() => _items.add({
-            'label': result.label,
-            'assignedTo': result.assignedTo,
-            'claimed': result.assignedTo != null,
-          }));
-      // TODO: write to Firestore
+
+    if (result != null && result.label.trim().isNotEmpty) {
+      await _packingRef.add({
+        'label': result.label.trim(),
+        'assignedTo': result.assignedTo,
+        'claimed': result.assignedTo != null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     }
+  }
+
+  Future<void> _claimItem(String itemId) async {
+    await _packingRef.doc(itemId).update({
+      'claimed': true,
+      'assignedTo': 'You',
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Group Packing List',
-              style: TextStyle(
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _packingRef.orderBy('createdAt').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.teal),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Group Packing List',
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.teal.shade700)),
-          const SizedBox(height: 12),
-          Expanded(
-            child: ListView(
-              children: [
-                ..._items.asMap().entries.map(
-                      (e) => Card(
+                  color: Colors.teal.shade700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView(
+                  children: [
+                    ...docs.map((doc) {
+                      final item = doc.data();
+                      final claimed = item['claimed'] == true;
+                      final assignedTo = item['assignedTo'];
+
+                      return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         elevation: 1,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         child: ListTile(
-                          title: Text(e.value['label']),
+                          title: Text(item['label'] ?? ''),
                           subtitle: Text(
-                            e.value['claimed']
-                                ? 'Claimed by ${e.value['assignedTo']}'
+                            claimed
+                                ? 'Claimed by ${assignedTo ?? 'Unknown'}'
                                 : 'Unassigned',
                             style: TextStyle(
-                                fontSize: 12,
-                                color: e.value['claimed']
-                                    ? Colors.teal
-                                    : Colors.grey),
+                              fontSize: 12,
+                              color: claimed ? Colors.teal : Colors.grey,
+                            ),
                           ),
-                          trailing: e.value['claimed']
-                              ? const Icon(Icons.check_circle,
-                                  color: Colors.teal)
+                          trailing: claimed
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.teal,
+                                )
                               : TextButton(
-                                  onPressed: () {
-                                    // TODO: Firestore transaction
-                                    setState(() {
-                                      _items[e.key]['claimed'] = true;
-                                      _items[e.key]['assignedTo'] = 'You';
-                                    });
-                                  },
+                                  onPressed: () => _claimItem(doc.id),
                                   child: const Text('Claim'),
                                 ),
                         ),
+                      );
+                    }),
+                    ListTile(
+                      leading: const Icon(Icons.add, color: Colors.teal),
+                      title: const Text(
+                        'Add item',
+                        style: TextStyle(color: Colors.teal),
                       ),
+                      onTap: _addItem,
                     ),
-                ListTile(
-                  leading: const Icon(Icons.add, color: Colors.teal),
-                  title: const Text('Add item',
-                      style: TextStyle(color: Colors.teal)),
-                  onTap: _addItem,
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

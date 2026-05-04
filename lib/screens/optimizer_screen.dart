@@ -39,8 +39,6 @@ class _OptimizerScreenState extends State<OptimizerScreen> {
   bool _isRunning = false;
   double _budgetLimit = 80;
 
-  // TODO: replace with optimizer_service.dart output
-  // These are dummy optimized results for UI purposes
   late List<ScoredActivity> _optimized;
   late List<Map<String, String>> _before;
 
@@ -48,45 +46,138 @@ class _OptimizerScreenState extends State<OptimizerScreen> {
   void initState() {
     super.initState();
     _before = List.from(widget.activities);
-    _optimized = _dummyOptimize(widget.activities);
+    _optimized = [];  
   }
 
-  // Dummy optimizer — replace with real optimizer_service call
-  List<ScoredActivity> _dummyOptimize(List<Map<String, String>> input) {
-    // TODO: call optimizer_service.optimize(activities, budgetLimit)
-    // For now, just reverse the order and attach dummy scores/reasons
-    final results = <ScoredActivity>[];
-    final reversed = input.reversed.toList();
-    final reasons = [
-      'Opens early — best visited first to avoid crowds',
-      'Located near previous stop — minimises travel time',
-      'Cost fits remaining budget of \$${_budgetLimit.toStringAsFixed(0)}',
-      'Closes late — ideal as a last activity of the day',
-    ];
-    for (int i = 0; i < reversed.length; i++) {
-      final a = reversed[i];
-      results.add(ScoredActivity(
+  List<ScoredActivity> _optimizeActivities(List<Map<String, String>> input) {
+    final parsed = input.asMap().entries.map((entry) {
+      final index = entry.key;
+      final a = entry.value;
+
+      final cost = double.tryParse(
+            (a['cost'] ?? '0').replaceAll(r'$', '').trim(),
+          ) ??
+          0;
+
+      final minutes = _parseTimeToMinutes(a['time'] ?? '');
+
+      final durationHours = _parseDurationHours(a['duration'] ?? '');
+
+      final budgetScore = cost <= _budgetLimit
+          ? 35
+          : (35 - ((cost - _budgetLimit) / 10)).clamp(0, 35).round();
+
+      final timeScore = minutes == null
+          ? 10
+          : minutes < 720
+              ? 25
+              : minutes < 1020
+                  ? 20
+                  : 15;
+
+      final durationScore = durationHours <= 2
+          ? 20
+          : durationHours <= 4
+              ? 15
+              : 8;
+
+      final originalOrderScore = 20 - index;
+
+      final totalScore =
+          (budgetScore + timeScore + durationScore + originalOrderScore)
+              .clamp(0, 100);
+
+      return ScoredActivity(
         name: a['name'] ?? '',
         time: a['time'] ?? '',
         duration: a['duration'] ?? '',
-        cost: double.tryParse(
-                (a['cost'] ?? '0').replaceAll(r'$', '')) ??
-            0,
-        score: 95 - i * 8,
-        reason: reasons[i % reasons.length],
-        originalIndex: input.length - 1 - i,
-      ));
-    }
-    return results;
+        cost: cost,
+        score: totalScore,
+        reason: _buildReason(
+          cost: cost,
+          minutes: minutes,
+          durationHours: durationHours,
+        ),
+        originalIndex: index,
+      );
+    }).toList();
+
+    parsed.sort((a, b) => b.score.compareTo(a.score));
+    return parsed;
   }
+
+  int? _parseTimeToMinutes(String time) {
+  final cleaned = time.trim().toUpperCase();
+
+  final match = RegExp(r'^(\d{1,2}):?(\d{2})?\s*(AM|PM)?$')
+      .firstMatch(cleaned);
+
+  if (match == null) return null;
+
+  var hour = int.tryParse(match.group(1) ?? '');
+  final minute = int.tryParse(match.group(2) ?? '0') ?? 0;
+  final period = match.group(3);
+
+  if (hour == null) return null;
+
+  if (period == 'PM' && hour != 12) hour += 12;
+  if (period == 'AM' && hour == 12) hour = 0;
+
+  return hour * 60 + minute;
+}
+
+double _parseDurationHours(String duration) {
+  final cleaned = duration.toLowerCase().trim();
+
+  final hourMatch = RegExp(r'(\d+(\.\d+)?)\s*h').firstMatch(cleaned);
+  if (hourMatch != null) {
+    return double.tryParse(hourMatch.group(1) ?? '') ?? 1;
+  }
+
+  final minuteMatch = RegExp(r'(\d+)\s*m').firstMatch(cleaned);
+  if (minuteMatch != null) {
+    final minutes = double.tryParse(minuteMatch.group(1) ?? '') ?? 60;
+    return minutes / 60;
+  }
+
+  return 1;
+}
+
+String _buildReason({
+  required double cost,
+  required int? minutes,
+  required double durationHours,
+}) {
+  final reasons = <String>[];
+
+  if (cost <= _budgetLimit) {
+    reasons.add('Fits within the selected budget');
+  } else {
+    reasons.add('Lower priority because it exceeds the budget');
+  }
+
+  if (minutes != null && minutes < 720) {
+    reasons.add('scheduled earlier in the day');
+  } else if (minutes != null && minutes >= 1020) {
+    reasons.add('better suited for later in the day');
+  }
+
+  if (durationHours <= 2) {
+    reasons.add('short enough to fit easily into the itinerary');
+  } else {
+    reasons.add('longer activity, so it needs more schedule space');
+  }
+
+  return reasons.join(', ');
+}
 
   Future<void> _runOptimizer() async {
     setState(() => _isRunning = true);
-    // Simulate async optimizer work
-    // TODO: replace with: _optimized = await optimizerService.optimize(...)
-    await Future.delayed(const Duration(milliseconds: 900));
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
     setState(() {
-      _optimized = _dummyOptimize(widget.activities);
+      _optimized = _optimizeActivities(widget.activities);
       _isRunning = false;
       _hasRun = true;
     });
